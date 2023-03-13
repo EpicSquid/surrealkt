@@ -6,10 +6,7 @@ import io.ktor.client.*
 import io.ktor.client.plugins.websocket.*
 import io.ktor.http.*
 import kotlinx.coroutines.cancelAndJoin
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.SharedFlow
-import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
 class SurrealWebsocketConnection(
@@ -17,13 +14,14 @@ class SurrealWebsocketConnection(
 	private val port: Int = 8000,
 	private val client: HttpClient = client()
 ) {
+	private val requests: MutableSharedFlow<RpcRequest> = MutableSharedFlow()
 	private val _responses: MutableSharedFlow<RpcResponse> = MutableSharedFlow()
 	val responses: SharedFlow<RpcResponse> = _responses.asSharedFlow()
 
-	suspend fun connect(inputs: Flow<RpcRequest<*>>) {
+	suspend fun connect() {
 		client.webSocket(method = HttpMethod.Get, host = host, port = port, path = "/rpc") {
 			val responseMessageRoutine = launch { receiveMessages() }
-			val sendMessagesRoutine = launch { sendMessages(inputs) }
+			val sendMessagesRoutine = launch { sendMessages() }
 
 			sendMessagesRoutine.join()
 			responseMessageRoutine.cancelAndJoin()
@@ -34,7 +32,14 @@ class SurrealWebsocketConnection(
 		while (true) _responses.emit(receiveDeserialized())
 	}
 
-	private suspend fun DefaultClientWebSocketSession.sendMessages(inputs: Flow<RpcRequest<*>>) {
-		inputs.collect { sendSerialized(it) } // TODO make this cancellable
+	private suspend fun DefaultClientWebSocketSession.sendMessages() {
+		requests.collect { sendSerialized(it) } // TODO make this cancellable
 	}
+
+	suspend fun <T> rpc(request: RpcRequest, mapper: (RpcResponse) -> T) : Flow<T> {
+		requests.emit(request)
+		return responses.filter { it.id == request.id }.map(mapper)
+	}
+
+	suspend fun rawRpc(request: RpcRequest) : Flow<RpcResponse> = rpc(request) { it }
 }
