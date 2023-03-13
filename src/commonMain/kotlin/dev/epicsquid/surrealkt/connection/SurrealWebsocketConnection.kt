@@ -14,9 +14,8 @@ class SurrealWebsocketConnection(
 	private val port: Int = 8000,
 	private val client: HttpClient = client()
 ) {
-	private val requests: MutableSharedFlow<RpcRequest> = MutableSharedFlow()
-	private val _responses: MutableSharedFlow<RpcResponse> = MutableSharedFlow()
-	val responses: SharedFlow<RpcResponse> = _responses.asSharedFlow()
+	private val requests: MutableSharedFlow<RpcRequest<*>> = MutableSharedFlow()
+	private val responses: MutableSharedFlow<RpcResponse> = MutableSharedFlow()
 
 	suspend fun connect() {
 		client.webSocket(method = HttpMethod.Get, host = host, port = port, path = "/rpc") {
@@ -29,17 +28,17 @@ class SurrealWebsocketConnection(
 	}
 
 	private suspend fun DefaultClientWebSocketSession.receiveMessages() {
-		while (true) _responses.emit(receiveDeserialized())
+		while (true) responses.emit(receiveDeserialized())
 	}
 
 	private suspend fun DefaultClientWebSocketSession.sendMessages() {
 		requests.collect { sendSerialized(it) } // TODO make this cancellable
 	}
 
-	suspend fun <T> rpc(request: RpcRequest, mapper: (RpcResponse) -> T) : Flow<T> {
+	suspend fun <T> rpc(request: RpcRequest<*>, mapper: (RpcResponse) -> T) : Flow<T> {
 		requests.emit(request)
 		return responses.filter { it.id == request.id }.map(mapper)
 	}
 
-	suspend fun rawRpc(request: RpcRequest) : Flow<RpcResponse> = rpc(request) { it }
+	suspend fun rawRpc(request: RpcRequest<*>) : Flow<RpcResponse> = rpc(request) { it }
 }

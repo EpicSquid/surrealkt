@@ -3,7 +3,7 @@ package dev.epicsquid.surrealkt.driver.model
 import kotlinx.serialization.Serializable
 
 @Serializable
-data class SignIn(
+data class UsernamePasswordSignIn(
 	val user: String,
-	val pass: String,
+	val pass: String
 )
