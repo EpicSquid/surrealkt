@@ -1,10 +1,15 @@
 package dev.epicsquid.surrealkt.connection
 
+import dev.epicsquid.surrealkt.connection.model.RpcRequest
+import dev.epicsquid.surrealkt.connection.model.RpcResponse
 import io.ktor.client.*
 import io.ktor.client.plugins.websocket.*
 import io.ktor.http.*
-import io.ktor.websocket.*
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
 
 class SurrealWebsocketConnection(
@@ -12,55 +17,24 @@ class SurrealWebsocketConnection(
 	private val port: Int = 8000,
 	private val client: HttpClient = client()
 ) {
+	private val _responses: MutableSharedFlow<RpcResponse> = MutableSharedFlow()
+	val responses: SharedFlow<RpcResponse> = _responses.asSharedFlow()
 
-	/**
-	 * Defines the last request made to the DB for querying
-	 */
-	private val lastRequestId: Long = 0
+	suspend fun connect(inputs: Flow<RpcRequest<*>>) {
+		client.webSocket(method = HttpMethod.Get, host = host, port = port, path = "/rpc") {
+			val responseMessageRoutine = launch { receiveMessages() }
+			val sendMessagesRoutine = launch { sendMessages(inputs) }
 
-	/**
-	 * Determines if the current connection loop should finish
-	 */
-	private var connected = false
-
-	suspend fun connect() {
-		if (!connected) {
-			connected = true
-			client.webSocket(method = HttpMethod.Get, host = host, port = port, path = "/rpc") {
-				val messageOutputRoutine = launch { outputMessages() }
-				val userInputRoutine = launch { inputMessages() }
-
-				userInputRoutine.join() // Wait for completion; either "exit" or error
-				messageOutputRoutine.cancelAndJoin()
-			}
+			sendMessagesRoutine.join()
+			responseMessageRoutine.cancelAndJoin()
 		}
 	}
 
-	fun disconnect() {
-		connected = false
+	private suspend fun DefaultClientWebSocketSession.receiveMessages() {
+		while (true) _responses.emit(receiveDeserialized())
 	}
 
-	suspend fun DefaultClientWebSocketSession.outputMessages() {
-		try {
-			for (message in incoming) {
-				message as? Frame.Text ?: continue
-				println(message.readText())
-			}
-		} catch (e: Exception) {
-//			println("Error while receiving: " + e.localizedMessage)
-		}
-	}
-
-	suspend fun DefaultClientWebSocketSession.inputMessages() {
-		while (true) {
-			val message = readln() ?: ""
-			if (message.equals("exit", true)) return
-			try {
-				send(message)
-			} catch (e: Exception) {
-//				println("Error while sending: " + e.localizedMessage)
-				return
-			}
-		}
+	private suspend fun DefaultClientWebSocketSession.sendMessages(inputs: Flow<RpcRequest<*>>) {
+		inputs.collect { sendSerialized(it) } // TODO make this cancellable
 	}
 }

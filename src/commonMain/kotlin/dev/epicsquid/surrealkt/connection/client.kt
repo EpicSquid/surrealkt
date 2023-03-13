@@ -12,14 +12,3 @@ fun client() = HttpClient {
 		pingInterval = 30
 	}
 }
-
-suspend fun proofOfConcept() {
-	client.webSocket(
-		method = HttpMethod.Get,
-		host = "127.0.0.1",
-		port = 8000,
-		path = "/sql"
-	) {
-
-	}
-}
