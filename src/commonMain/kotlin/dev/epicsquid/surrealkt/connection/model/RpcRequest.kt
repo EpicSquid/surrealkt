@@ -1,10 +1,11 @@
 package dev.epicsquid.surrealkt.connection.model
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonArray
 
 @Serializable
-data class RpcRequest<T>(
+data class RpcRequest(
 	val id: String,
 	val method: String,
-	val params: List<T>? = null
+	val params: JsonArray? = null
 )
