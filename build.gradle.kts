@@ -98,11 +98,19 @@ kotlin {
 //		}
 
 		val desktopMain by getting {
+			dependsOn(commonMain)
 			dependencies {
 				implementation("io.ktor:ktor-client-okhttp:$ktorVersion")
 			}
 		}
-//		val desktopTest by getting
+		val desktopTest by getting {
+			dependencies {
+				implementation("junit:junit:4.13.2")
+				implementation("org.junit.jupiter:junit-jupiter-api:5.9.2")
+				implementation("org.junit.jupiter:junit-jupiter-engine:5.9.2")
+			}
+		}
+
 
 //		val jsMain by getting {
 //			dependencies {
